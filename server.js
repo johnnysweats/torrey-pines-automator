@@ -1,5 +1,5 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const { chromium } = require('playwright');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const cron = require('node-cron');
@@ -73,7 +73,7 @@ app.post('/api/schedule-booking', (req, res) => {
     }
 });
 
-// Main automation function - optimized for Vercel
+// Main automation function - using Playwright for better Vercel compatibility
 async function submitToWaitWhile(data) {
     let browser;
     
@@ -83,7 +83,7 @@ async function submitToWaitWhile(data) {
         console.log('🚀 Starting automation - preventing multiple instances');
         
         console.log('Launching browser...');
-        browser = await puppeteer.launch({
+        browser = await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
@@ -112,26 +112,28 @@ async function submitToWaitWhile(data) {
                 '--no-pings',
                 '--password-store=basic',
                 '--use-mock-keychain'
-            ],
-            // For Vercel, we need to use the bundled Chrome
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
+            ]
         });
         
         const page = await browser.newPage();
         
         // Set viewport
-        await page.setViewport({ width: 1280, height: 720 });
+        await page.setViewportSize({ width: 1280, height: 720 });
         
         // Set geolocation to Torrey Pines coordinates
         console.log('Setting geolocation to Torrey Pines...');
-        await page.setGeolocation({
-            latitude: 32.904498,
-            longitude: -117.245091
+        await page.context().grantPermissions(['geolocation'], { origin: 'https://waitwhile.com' });
+        await page.evaluateOnNewDocument(() => {
+            navigator.geolocation.getCurrentPosition = (success) => {
+                success({
+                    coords: {
+                        latitude: 32.904498,
+                        longitude: -117.245091,
+                        accuracy: 20
+                    }
+                });
+            };
         });
-        
-        // Grant geolocation permissions
-        const context = browser.defaultBrowserContext();
-        await context.overridePermissions('https://waitwhile.com', ['geolocation']);
         
         console.log('Navigating to WaitWhile...');
         await page.goto('https://waitwhile.com/locations/torreypinesgolf/welcome', {
@@ -172,10 +174,10 @@ async function submitToWaitWhile(data) {
             console.log('Clicking join button...');
             // Try different ways to click the button
             try {
-                await page.click(`button:contains("${joinButton.text}")`);
+                await page.click(`button:has-text("${joinButton.text}")`);
             } catch (e) {
                 try {
-                    await page.click(`a:contains("${joinButton.text}")`);
+                    await page.click(`a:has-text("${joinButton.text}")`);
                 } catch (e2) {
                     // Try clicking by text content
                     await page.evaluate((text) => {
@@ -239,7 +241,7 @@ async function submitToWaitWhile(data) {
                 for (const selector of nameSelectors) {
                     const element = await page.$(selector);
                     if (element) {
-                        await element.type(value);
+                        await element.fill(value);
                         console.log(`Filled ${fieldName} using name selector: ${selector}`);
                         fieldsFilled++;
                         break;
@@ -260,7 +262,7 @@ async function submitToWaitWhile(data) {
                     for (const selector of placeholderSelectors) {
                         const element = await page.$(selector);
                         if (element) {
-                            await element.type(value);
+                            await element.fill(value);
                             console.log(`Filled ${fieldName} using placeholder selector: ${selector}`);
                             fieldsFilled++;
                             break;
@@ -283,7 +285,7 @@ async function submitToWaitWhile(data) {
                     for (const selector of idSelectors) {
                         const element = await page.$(selector);
                         if (element) {
-                            await element.type(value);
+                            await element.fill(value);
                             console.log(`Filled ${fieldName} using ID selector: ${selector}`);
                             fieldsFilled++;
                             break;
@@ -336,7 +338,7 @@ async function submitToWaitWhile(data) {
             } catch (e) {
                 // Fallback to selector
                 try {
-                    await page.click(`button:contains("${submitButton.text}")`);
+                    await page.click(`button:has-text("${submitButton.text}")`);
                 } catch (e2) {
                     await page.click(`input[type="submit"]`);
                 }
