@@ -3,7 +3,5 @@
     "server.js": {
       "maxDuration": 30
     }
-  },
-  "buildCommand": "npm install && npx playwright install chromium",
-  "installCommand": "npm install && npx playwright install chromium"
+  }
 }
