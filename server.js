@@ -73,7 +73,7 @@ app.post('/api/schedule-booking', (req, res) => {
     }
 });
 
-// Main automation function - optimized for Railway
+// Main automation function - simplified for Railway
 async function submitToWaitWhile(data) {
     let browser;
     
@@ -89,34 +89,9 @@ async function submitToWaitWhile(data) {
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
                 '--disable-gpu',
                 '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-extensions',
-                '--disable-plugins',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--disable-translate',
-                '--hide-scrollbars',
-                '--mute-audio',
-                '--no-default-browser-check',
-                '--no-pings',
-                '--password-store=basic',
-                '--use-mock-keychain',
-                '--disable-background-networking',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--metrics-recording-only',
-                '--no-first-run',
-                '--safebrowsing-disable-auto-update',
-                '--disable-ipc-flooding-protection'
+                '--disable-features=VizDisplayCompositor'
             ]
         });
         
@@ -142,7 +117,7 @@ async function submitToWaitWhile(data) {
             timeout: 30000
         });
         
-        // Wait for page to load and geolocation to be processed
+        // Wait for page to load
         await page.waitForTimeout(3000);
         
         // Take a screenshot for debugging
