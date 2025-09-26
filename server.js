@@ -1,9 +1,9 @@
 const express = require('express');
+const puppeteer = require('puppeteer');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const cron = require('node-cron');
 const path = require('path');
-const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -73,43 +73,301 @@ app.post('/api/schedule-booking', (req, res) => {
     }
 });
 
-// Main automation function - using direct HTTP requests instead of browser automation
+// Main automation function - optimized for Railway
 async function submitToWaitWhile(data) {
+    let browser;
+    
     try {
         // Set the flag to prevent multiple instances
         isAutomationRunning = true;
         console.log('🚀 Starting automation - preventing multiple instances');
         
-        // For now, we'll simulate the automation since browser automation is complex on Vercel
-        // In a real implementation, you would need to:
-        // 1. Use a service like Browserless.io or ScrapingBee
-        // 2. Or implement the actual HTTP requests to WaitWhile's API
-        // 3. Or use a different deployment platform that supports browser automation better
+        console.log('Launching browser...');
+        browser = await puppeteer.launch({
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-default-browser-check',
+                '--no-pings',
+                '--password-store=basic',
+                '--use-mock-keychain',
+                '--disable-background-networking',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--metrics-recording-only',
+                '--no-first-run',
+                '--safebrowsing-disable-auto-update',
+                '--disable-ipc-flooding-protection'
+            ]
+        });
         
-        console.log('Simulating waitlist submission...');
-        console.log('Data to submit:', data);
+        const page = await browser.newPage();
         
-        // Simulate processing time
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Set viewport
+        await page.setViewport({ width: 1280, height: 720 });
         
-        // For demonstration purposes, we'll return a success message
-        // In production, you would implement the actual form submission logic here
+        // Set geolocation to Torrey Pines coordinates
+        console.log('Setting geolocation to Torrey Pines...');
+        await page.setGeolocation({
+            latitude: 32.904498,
+            longitude: -117.245091
+        });
         
-        console.log('✅ Simulated submission completed');
-        return { 
-            success: true, 
-            fieldsFilled: 4, 
-            message: 'Simulated submission to Torrey Pines waitlist! (Browser automation requires additional setup for production use)',
-            submittedData: data
+        // Grant geolocation permissions
+        const context = browser.defaultBrowserContext();
+        await context.overridePermissions('https://waitwhile.com', ['geolocation']);
+        
+        console.log('Navigating to WaitWhile...');
+        await page.goto('https://waitwhile.com/locations/torreypinesgolf/welcome', {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+        });
+        
+        // Wait for page to load and geolocation to be processed
+        await page.waitForTimeout(3000);
+        
+        // Take a screenshot for debugging
+        await page.screenshot({ path: 'waitwhile-page.png' });
+        console.log('Screenshot saved for debugging');
+        
+        // Get all buttons and links on the page
+        const allButtons = await page.$$eval('button, a, [role="button"]', elements => 
+            elements.map(el => ({
+                tagName: el.tagName,
+                text: el.textContent.trim(),
+                className: el.className,
+                id: el.id,
+                href: el.href || null
+            }))
+        );
+        
+        console.log('Found buttons/links:', allButtons);
+        
+        // Look for the "Join Waitlist" button
+        let joinButton = null;
+        const joinTexts = ['join waitlist', 'join', 'sign up', 'get started', 'book now', 'waitlist'];
+        
+        for (const button of allButtons) {
+            const text = button.text.toLowerCase();
+            if (joinTexts.some(joinText => text.includes(joinText))) {
+                console.log(`Found potential join button: ${button.text}`);
+                joinButton = button;
+                break;
+            }
+        }
+        
+        if (joinButton) {
+            console.log('Clicking join button...');
+            // Try different ways to click the button
+            try {
+                await page.click(`button:contains("${joinButton.text}")`);
+            } catch (e) {
+                try {
+                    await page.click(`a:contains("${joinButton.text}")`);
+                } catch (e2) {
+                    // Try clicking by text content
+                    await page.evaluate((text) => {
+                        const elements = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+                        const element = elements.find(el => el.textContent.trim().toLowerCase().includes(text.toLowerCase()));
+                        if (element) element.click();
+                    }, joinButton.text);
+                }
+            }
+            await page.waitForTimeout(2000);
+        } else {
+            console.log('No join button found, trying to find any clickable element...');
+            // Try clicking the first button or link
+            const firstButton = await page.$('button, a[href]');
+            if (firstButton) {
+                console.log('Clicking first available button/link...');
+                await firstButton.click();
+                await page.waitForTimeout(2000);
+            }
+        }
+        
+        // Now try to fill form fields
+        console.log('Looking for form fields...');
+        
+        // Get all input fields
+        const allInputs = await page.$$eval('input, select, textarea', elements => 
+            elements.map(el => ({
+                tagName: el.tagName,
+                type: el.type || 'text',
+                name: el.name || '',
+                id: el.id || '',
+                placeholder: el.placeholder || '',
+                className: el.className || ''
+            }))
+        );
+        
+        console.log('Found input fields:', allInputs);
+        
+        // Try to fill the form
+        const formData = {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            email: data.email,
+            phone: data.phone
         };
+        
+        let fieldsFilled = 0;
+        
+        // Try different strategies to fill fields
+        for (const [fieldName, value] of Object.entries(formData)) {
+            if (!value) continue;
+            
+            // Strategy 1: Try by name attribute
+            try {
+                const nameSelectors = [
+                    `input[name*="${fieldName}"]`,
+                    `input[name*="${fieldName.toLowerCase()}"]`,
+                    `input[name*="${fieldName.charAt(0).toLowerCase() + fieldName.slice(1)}"]`
+                ];
+                
+                for (const selector of nameSelectors) {
+                    const element = await page.$(selector);
+                    if (element) {
+                        await element.type(value);
+                        console.log(`Filled ${fieldName} using name selector: ${selector}`);
+                        fieldsFilled++;
+                        break;
+                    }
+                }
+            } catch (e) {
+                // Try next strategy
+            }
+            
+            // Strategy 2: Try by placeholder
+            if (fieldsFilled === 0) {
+                try {
+                    const placeholderSelectors = [
+                        `input[placeholder*="${fieldName}"]`,
+                        `input[placeholder*="${fieldName.toLowerCase()}"]`
+                    ];
+                    
+                    for (const selector of placeholderSelectors) {
+                        const element = await page.$(selector);
+                        if (element) {
+                            await element.type(value);
+                            console.log(`Filled ${fieldName} using placeholder selector: ${selector}`);
+                            fieldsFilled++;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // Try next strategy
+                }
+            }
+            
+            // Strategy 3: Try by ID
+            if (fieldsFilled === 0) {
+                try {
+                    const idSelectors = [
+                        `#${fieldName}`,
+                        `#${fieldName.toLowerCase()}`,
+                        `#${fieldName.charAt(0).toLowerCase() + fieldName.slice(1)}`
+                    ];
+                    
+                    for (const selector of idSelectors) {
+                        const element = await page.$(selector);
+                        if (element) {
+                            await element.type(value);
+                            console.log(`Filled ${fieldName} using ID selector: ${selector}`);
+                            fieldsFilled++;
+                            break;
+                        }
+                    }
+                } catch (e) {
+                    // Try next strategy
+                }
+            }
+        }
+        
+        console.log(`Successfully filled ${fieldsFilled} fields`);
+        
+        // Look for submit button
+        console.log('Looking for submit button...');
+        const submitButtons = await page.$$eval('button, input[type="submit"]', elements => 
+            elements.map(el => ({
+                tagName: el.tagName,
+                type: el.type || 'button',
+                text: el.textContent.trim(),
+                className: el.className,
+                id: el.id
+            }))
+        );
+        
+        console.log('Found submit buttons:', submitButtons);
+        
+        // Try to find and click submit button
+        const submitTexts = ['submit', 'send', 'join', 'sign up', 'book', 'continue', 'join the line'];
+        let submitButton = null;
+        
+        for (const button of submitButtons) {
+            const text = button.text.toLowerCase();
+            if (submitTexts.some(submitText => text.includes(submitText))) {
+                console.log(`Found potential submit button: ${button.text}`);
+                submitButton = button;
+                break;
+            }
+        }
+        
+        if (submitButton) {
+            console.log('Clicking submit button...');
+            try {
+                // Try clicking by text content first
+                await page.evaluate((text) => {
+                    const elements = Array.from(document.querySelectorAll('button, input[type="submit"]'));
+                    const element = elements.find(el => el.textContent.trim().toLowerCase().includes(text.toLowerCase()));
+                    if (element) element.click();
+                }, submitButton.text);
+            } catch (e) {
+                // Fallback to selector
+                try {
+                    await page.click(`button:contains("${submitButton.text}")`);
+                } catch (e2) {
+                    await page.click(`input[type="submit"]`);
+                }
+            }
+            await page.waitForTimeout(2000);
+            
+            console.log('Form submitted successfully!');
+            return { success: true, fieldsFilled, message: 'Successfully submitted to waitlist!' };
+        } else {
+            console.log('No submit button found');
+            return { success: false, fieldsFilled, message: 'Submit button not found' };
+        }
         
     } catch (error) {
         console.error('Error in automation:', error);
         throw error;
     } finally {
-        // Always reset the flag
+        // Always reset the flag and close browser
         isAutomationRunning = false;
         console.log('✅ Automation completed - flag reset');
+        
+        if (browser) {
+            await browser.close();
+        }
     }
 }
 
@@ -150,15 +408,6 @@ app.get('/api/scheduled-bookings', (req, res) => {
             scheduleTime: booking.scheduleTime,
             status: booking.status
         })),
-        isAutomationRunning: isAutomationRunning
-    });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'healthy', 
-        timestamp: new Date().toISOString(),
         isAutomationRunning: isAutomationRunning
     });
 });
