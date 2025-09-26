@@ -73,7 +73,7 @@ app.post('/api/schedule-booking', (req, res) => {
     }
 });
 
-// Main automation function - optimized for cloud deployment
+// Main automation function - optimized for Vercel
 async function submitToWaitWhile(data) {
     let browser;
     
@@ -84,7 +84,7 @@ async function submitToWaitWhile(data) {
         
         console.log('Launching browser...');
         browser = await puppeteer.launch({
-            headless: true, // Set to true for cloud deployment
+            headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -98,8 +98,23 @@ async function submitToWaitWhile(data) {
                 '--disable-features=VizDisplayCompositor',
                 '--disable-background-timer-throttling',
                 '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
-            ]
+                '--disable-renderer-backgrounding',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-images',
+                '--disable-javascript',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-default-browser-check',
+                '--no-pings',
+                '--password-store=basic',
+                '--use-mock-keychain'
+            ],
+            // For Vercel, we need to use the bundled Chrome
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath()
         });
         
         const page = await browser.newPage();

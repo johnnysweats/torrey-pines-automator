@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "server.js": {
+      "maxDuration": 30
+    }
+  },
+  "buildCommand": "npm install && npx puppeteer browsers install chrome",
+  "installCommand": "npm install && npx puppeteer browsers install chrome"
+}
